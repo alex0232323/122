@@ -1,0 +1,40 @@
+<?php
+
+/*
+ * Implement hook_schema.
+ */
+function commerce_notify_schema(){
+  
+  $schema['commerce_notify'] = array(
+    'description' => 'The base table for commerce notify.',
+      'fields' => array(
+        'sno' => array(
+          'description' => 'Serial number for notify request.',
+          'type' => 'serial',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+        ),
+        'product_id' => array(
+          'description' => 'Product ID to notify for.',
+          'type'  => 'int',
+          'length'  => 20,
+        ),
+        'email' => array(
+          'description' => 'Email ID to notify.',
+          'type' => 'varchar',
+          'length' => 60,
+          'not null' => TRUE,
+          'default' => '0',
+        ),
+        'time' => array(
+          'description' => 'Time of the notify request.',
+          'type' => 'int',
+          'length' => 11,
+          'not null' => TRUE,
+        ),
+     ),
+    'primary key' => array('sno'),
+  );
+  
+  return $schema;
+}
