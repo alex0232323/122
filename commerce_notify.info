@@ -1,11 +1,15 @@
 name = Commerce Notify
 description = Commerce notify for product available to buy.
 core = 7.x
-package = "Indiareads"
-version = 7.x-1.x
+package = Commerce (stock)
 
 dependencies[] = commerce
+dependencies[] = commerce_cart
+dependencies[] = commerce_product
+dependencies[] = commerce_product_reference
 dependencies[] = commerce_stock
+dependencies[] = commerce_ss
+
 
 files[] = commerce_notify.module
 files[] = commerce_notify.install

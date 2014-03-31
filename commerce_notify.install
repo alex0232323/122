@@ -1,9 +1,13 @@
 <?php
 
+/**
+ * @file
+ */
+
 /*
  * Implement hook_schema.
  */
-function commerce_notify_schema(){
+function commerce_notify_schema() {
   
   $schema['commerce_notify'] = array(
     'description' => 'The base table for commerce notify.',
@@ -19,11 +23,22 @@ function commerce_notify_schema(){
           'type'  => 'int',
           'length'  => 20,
         ),
+        'product_name' => array(
+          'description' => 'Product name to notify for.',
+          'type' => 'varchar',
+          'length' => 256,
+        ),
         'email' => array(
           'description' => 'Email ID to notify.',
           'type' => 'varchar',
           'length' => 60,
           'not null' => TRUE,
+          'default' => '0',
+        ),
+        'status' => array(
+          'description' => 'Status of the notification',
+          'type' => 'int',
+          'length' => 1,
           'default' => '0',
         ),
         'time' => array(

@@ -1,53 +1,77 @@
 <?php
 
-/*
+/**
+ * @file
  * Custom module for registering email in case of product is un-available.
  * Once product get added to the inventry, users will be notified on cron run.
  */
 
-
-/*
+/**
  * Implements hook_node_view().
+ * 
+ * @param type $node
+ * @param type $view_mode
+ * @param type $langcode
+ * @return type
  */
-function commerce_notify_node_view($node, $view_mode, $langcode){
+function commerce_notify_node_view($node, $view_mode, $langcode) {
   
-  if($node->type == 'book_display'){
- 
-	$product_id = $node->field_book_reference['und'][0]['product_id'];
-    
-	if($view_mode == 'full'){
-  
-		$product_stock = db_query("SELECT * FROM {field_data_commerce_stock} fdcs WHERE fdcs.entity_id = '".$product_id."'");
-		$stock = 0;
-		foreach ($product_stock as $record) {
-		$stock = $record->commerce_stock_value;
-		}
-		if($stock == 0){
-		  $notify_form = drupal_get_form('commerce_notify_form'/*, $node*/);
-		  $node->content['my_additional_field'] = array(
-			'#markup' => drupal_render($notify_form),
-			'#weight' => 18,
-		);
-	  }    
-	}
-  }  
+  if ($view_mode == "full") {
+    $field_instances = field_info_instances('node', $node->type);
+
+    foreach ($field_instances as $field_instance) {    
+      $field_info = field_info_field($field_instance['field_name']);
+      if ($field_info['type'] == 'commerce_product_reference') {  
+        $field_name = $field_instance['field_name'];      
+        $field_item = field_get_items('node', $node, $field_name);      
+        $product_id = $field_item[0]['product_id'];
+
+        $wrapper = entity_metadata_wrapper('commerce_product', $product_id);
+
+        //If there's no stock field on the product.
+        if (empty($wrapper->commerce_stock)) {
+          return;
+        }
+
+        //If there is no stock, insert notify form.
+        if ($wrapper->commerce_stock->value() == 0) {
+          $notify_form = drupal_get_form('commerce_notify_form');
+          $node->content['notify_field'] = array(
+            '#markup' => drupal_render($notify_form),
+          );
+        }
+      }
+    }
+  }
 }
 
-/*
+/**
  * Implement hook_form().
  */
-function commerce_notify_form($node, &$form_state){  
+function commerce_notify_form($node, &$form_state) {
+  
   global $user;
-  if($user->uid){
-	$email = $user->mail;
-  }
-  else{
-	$email = "";
-  }
   $node = menu_get_object();
-  $product_id = $node->field_book_reference['und'][0]['product_id'];  
+  $field_instances = field_info_instances('node', $node->type);
+  
+  foreach ($field_instances as $field_instance) {    
+    $field_info = field_info_field($field_instance['field_name']);
+    if ($field_info['type'] == 'commerce_product_reference') {      
+      $field_name = $field_instance['field_name'];      
+      $field_item = field_get_items('node', $node, $field_name);      
+      $product_id = $field_item[0]['product_id'];
+    }
+  }
+  
+  if ($user->uid) {
+    $email = $user->mail;
+  }
+  else {
+    $email = "";
+  }
+ 
   $form['markup'] = array(
-    '#markup'  => t('Notify me when this book is in stock: '),
+    '#markup'  => t('Notify me when this product is in stock:'),
   );
   $form['product_id'] = array(
     '#type' => 'hidden', 
@@ -58,55 +82,51 @@ function commerce_notify_form($node, &$form_state){
     '#title'  => 'Email: ',
     '#required' => TRUE,
     '#default_value'  => $email,
-    '#size'=> 30,
-    /*
-    '#prefix' => '<div class="notify_email">',
-    '#sufix'  => '</div>',
-    */
+    '#size' => 30,
     '#element_validate' => array('comment_notify_email_element_validate'),
   );
   $form['submit'] = array(
-    '#type' => 'submit', 
+    '#type' => 'submit',
     '#value' => t('Notify me'),
-    /*
-    '#prefix' => '<div class = "notify_button">',
-    '#sufix'  => '</div>',
-    */
   );  
   return $form;
 }
 
-/*
- * Implement hook_form_submit().
+/**
+ * Implements hook_form_submit().
  */
-function commerce_notify_form_submit($form, $form_state){  
+function commerce_notify_form_submit($form, $form_state) {  
   $product_id = $form_state['values']['product_id'];
   $email_id = $form_state['values']['email'];  
-  $date = date("Y-m-d H:i:s", time());
   
   //Call a function to check submitted email ID with existed.
   $result = _commerce_notify_email_verify($product_id, $email_id);
   
   //If there is no value, submit into DB.
-  if($result == 'FALSE'){
+  if ($result == 'FALSE') {
+    $product_detail = commerce_product_load($product_id);
     $commerce_notify_inserted = db_insert('commerce_notify')
       ->fields(array(
       'product_id' => $product_id,
+      'product_name' => $product_detail->title,
       'email' => $email_id,
       'time'  => REQUEST_TIME,
     ))
     ->execute();  
-    drupal_set_message("You will be notify on $email_id, when product become available with us.");
-  }else{
-    drupal_set_message("Your email-id $email_id is already in the list of notification of this product.");
+    drupal_set_message(t('You will be notify on (@email), when product become available with us.', array('@email' => $email_id)));
+  } 
+  else {
+    drupal_set_message(t('Your email-id (@email) is already in the list of notification of this product.', array('@email' => $email_id)));
   }
 }
 
-/*
- * Function to check email ID inserted by user, whether it exists in notify- 
- * table for the product or not.
+/**
+ * 
+ * @param type $product_id
+ * @param type $email
+ * @return string
  */
-function _commerce_notify_email_verify($product_id, $email){
+function _commerce_notify_email_verify($product_id, $email) {
   
   $notify_record = db_select('commerce_notify', 'cn')
     ->fields('cn', array())
@@ -116,16 +136,16 @@ function _commerce_notify_email_verify($product_id, $email){
   
   $no_of_record = $notify_record->rowCount();//Check number of result.
   
-  if($no_of_record >= 1){
+  if ($no_of_record >= 1) {
     $return_value = "TRUE";
-  }else{
+  }
+  else {
     $return_value = "FALSE";
   }
- 
   return $return_value;
 }
 
-/*
+/**
  * Function to check email ID validity.
  */
 function comment_notify_email_element_validate($element, &$form_state, $form) {
@@ -134,32 +154,48 @@ function comment_notify_email_element_validate($element, &$form_state, $form) {
    }
 }
 
-/*
- * Implement hook_cron().
+/**
+ * Implements hook_cron().
  */
-function commerce_notify_cron(){
+function commerce_notify_cron() {
+  
+  dpm("inside cron");
   
   $email_id_list = db_select('commerce_notify', 'cn')
     ->fields('cn', array())
+    ->condition('status', '0', '=')
     ->execute();
   
+  //print_r($email_id_list);
+  
+  //watchdog('PHP', $email_id_list, array('0' => '$error'), WATCHDOG_ERROR);
+  
   foreach ($email_id_list as $notify_record) {
-    $product_availability = db_select('field_data_commerce_stock', 'fdcs')
-      ->fields('fdcs', array())
-      ->condition('entity_id', $notify_record->product_id, '=')
-      ->execute();
-    foreach($product_availability as $product_record){
-      $stock_value = $product_record->commerce_stock_value;
-      if($stock_value >=1){
-        
-        //Send email
-        
-        $user_record_deleted = db_delete('commerce_notify')
-          ->condition('product_id', $notify_record->product_id)
-          ->condition('email', $notify_record->email)
-          ->execute();
-        //dpm('Product is available, so email is sent & user deleted.');
-      }
+    
+    //watchdog('PHP', $notify_record->email, array('0' => '$error'), WATCHDOG_ERROR);
+    
+    $wrapper = entity_metadata_wrapper('commerce_product', $notify_record->product_id);
+    
+    watchdog('Notify', $notify_record->product_id, array('0' => '$error'), WATCHDOG_ERROR);
+    
+    if (empty($wrapper->commerce_stock)) {
+      continue;
+    }
+    elseif ($wrapper->commerce_stock->value() == 1) {
+      
+      watchdog('PHP', 'Inside mail', array('0' => '$error'), WATCHDOG_ERROR);
+      
+      // Send the notification.
+      $message = message_create('product_available');
+      $wrapper = entity_metadata_wrapper('message', $message);
+      $wrapper->commerce_notify->set($notify_record->product_id);
+      message_notify_send_message($message);
+      
+      $user_record_deleted = db_update('commerce_notify')
+        ->fields(array('status' => TRUE))
+        ->condition('product_id', $notify_record->product_id)
+        ->condition('email', $notify_record->email)
+        ->execute();
     }
   }  
 }
